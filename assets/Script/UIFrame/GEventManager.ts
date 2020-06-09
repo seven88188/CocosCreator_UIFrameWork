@@ -6,33 +6,33 @@
  * @Last Modified time: 2019-06-06 10:59:29 
  */
 export default class GEventManager {
-    private static _eventMap: {[key: string]: Array<ElementEvent>} = cc.js.createMap();
+    private static _allEvents: {[key: string]: Array<ElementEvent>} = cc.js.createMap();
     private static _bufferEventMap: {[key: string]: Array<any>} = cc.js.createMap();          // 缓存的消息
 
-    private static clearTimers: Array<ElementTimer> = [];
-    private static autoClearTimeNumber = 10;                                   // 定时清理的间隔
+    private static _openAutoClear = false;                                      // 开启定时清理监听事件
+    private static _clearTimers: Array<ElementTimer> = [];
+    private static _autoClearTimeNumber = 10;                                   // 定时清理的间隔
 
     /**
      * 发布一个事件, 对于缓存的消息, 10s还没有被接收, 那么会定时回收
      * @param eventName 
      * @param parameter 
      */
-    public static emit(eventName: string, parameter: any) {
-        let array = this._eventMap[eventName];
+    public static emit(eventName: string, ...parameter: any) {
+        let array = this._allEvents[eventName];
         if(array === undefined) {
             // 将消息存入
             if(this._bufferEventMap[eventName] === undefined) {
                 this._bufferEventMap[eventName] = [];
             }
             this._bufferEventMap[eventName].push(parameter);
-            // 开始定时清理定时器, 如果不希望开启, 注释下面一行即可
-            this.autoClearBufferEvent(eventName);
+            if(this._openAutoClear) this.autoClearBufferEvent(eventName);
             return ;
         }
         for(let i=0; i<array.length; i++) {
             let element = array[i];
             if(!element) continue;
-            element.callback.call(element.target, parameter);
+            element.callback.call(element.target, ...parameter);
             element.once && array.splice(i, 1) && --i;
         }
     }
@@ -44,15 +44,15 @@ export default class GEventManager {
      * @param target
      */
     public static on(eventName: string, callback: Function, target: any, once = false) {
-        if(this._eventMap[eventName] === undefined) {
-            this._eventMap[eventName] = [];
+        if(this._allEvents[eventName] === undefined) {
+            this._allEvents[eventName] = [];
         }
-        this._eventMap[eventName].push(new ElementEvent(callback, target, once));
+        this._allEvents[eventName].push(new ElementEvent(callback, target, once));
 
         // 新订阅一个事件, 那么看看是不是有缓存的消息, 发布出去
         if(this._bufferEventMap[eventName] != undefined) {
             for(let i=0; i<this._bufferEventMap[eventName].length; i++) {
-                callback.call(target, this._bufferEventMap[eventName][i]);
+                callback.call(target, ...this._bufferEventMap[eventName][i]);
             }
             this._bufferEventMap[eventName] = null;
             delete this._bufferEventMap[eventName];
@@ -69,7 +69,7 @@ export default class GEventManager {
      * @param target 
      */
     public static off(eventName: string, callback: Function, target: any) {
-        let array = this._eventMap[eventName];
+        let array = this._allEvents[eventName];
         if(array === undefined) return ;
         for(let i=array.length-1; i>0; i--) {
             let element = array[i];
@@ -79,8 +79,8 @@ export default class GEventManager {
             }
         }
         if(array.length === 0) {
-            this._eventMap[eventName] = null;
-            delete this._eventMap[eventName];
+            this._allEvents[eventName] = null;
+            delete this._allEvents[eventName];
         }
     }
     /**
@@ -88,15 +88,27 @@ export default class GEventManager {
      * @param eventName 
      */
     public static clear(eventName: string) {
-        this._eventMap[eventName] = null;
-        delete this._eventMap[eventName];
+        this._allEvents[eventName] = null;
+        delete this._allEvents[eventName];
+    }
+
+    /** 清楚对象上所有注册的事件 */
+    public static targetOff(target: Object) {
+        for(const key in this._allEvents) {
+            let arr = this._allEvents[key];
+            for(let i=arr.length-1; i>=0; i--) {
+                if(arr[i].target === target) {
+                    arr.slice(i, 1);
+                }
+            }
+        }
     }
 
 
     /** 自动清理bufferEventMap中的未接收消息 */
     private static autoClearBufferEvent(eventName: string) {
         
-        for(const e of this.clearTimers) {
+        for(const e of this._clearTimers) {
             if(e.eventName === eventName) {         // 当前event已经开启了定时回收
                 return;
             }
@@ -104,9 +116,9 @@ export default class GEventManager {
 
         let clearTimer = setTimeout(() => {
             clearEvent(eventName);
-        }, this.autoClearTimeNumber * 1000);
+        }, this._autoClearTimeNumber * 1000);
 
-        this.clearTimers.push(new ElementTimer(eventName, clearTimer));
+        this._clearTimers.push(new ElementTimer(eventName, clearTimer));
 
         let clearEvent = (eventName: string) => {
             if(!this._bufferEventMap[eventName]) {
@@ -115,13 +127,14 @@ export default class GEventManager {
             this._bufferEventMap[eventName] = null;
             delete this._bufferEventMap[eventName];
 
-            for(let i=this.clearTimers.length-1; i>=0; i--) {
-                if(this.clearTimers[i].eventName === eventName) {
-                    this.clearTimers.splice(i, 1);
+            for(let i=this._clearTimers.length-1; i>=0; i--) {
+                if(this._clearTimers[i].eventName === eventName) {
+                    this._clearTimers.splice(i, 1);
                 }
             }
         };
     }
+    
 }
 
 export class ElementEvent {

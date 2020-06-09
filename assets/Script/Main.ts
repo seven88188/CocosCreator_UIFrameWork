@@ -1,21 +1,30 @@
-import UIManager from "./UIFrame/UIManager";
-import ButtonPlus from "./UIFrame/ButtonPlus";
-import UIIndependentManager from "./UIFrame/UIIndependentManager";
+import ButtonPlus from "./UIFrame/components/ButtonPlus";
+import TipsManager from "./UIFrame/TipsManager";
+import TouchPlus from "./UIFrame/components/TouchPlus";
+import UILogin from "./test/UILogin";
+import GEventManager from "./UIFrame/GEventManager";
 
 const {ccclass, property} = cc._decorator;
 
 @ccclass
-export default class Helloworld extends cc.Component {
+export default class Main extends cc.Component {
 
     @property(ButtonPlus)
     buttonPlus: ButtonPlus = null;
 
-    onLoad() {}
+    @property(TouchPlus)
+    touchPlus: TouchPlus = null;
+
+    onLoad() {
+        GEventManager.on("Event_Login", (a: number, b: number, c: number) => {
+            console.log("Event ", a, b, c);
+        }, this);
+    }
 
     start () {
-        UIIndependentManager.getInstance().setLoadingForm("UIForm/LoadingForm");
-        UIManager.GetInstance().ShowUIForms("UIForm/LoginForm");
-
+        TipsManager.getInstance().setLoadingForm("UIForm/UILoading");
+        UILogin.show(1, 2, 3);
+    
         this.buttonPlus.addClick(() => {
             cc.log("点击事件!");
         }, this);
@@ -25,6 +34,12 @@ export default class Helloworld extends cc.Component {
         }, () => {
             cc.log("触发长按事件 结束");
         }, this);
+
+        this.touchPlus.addEvent((e) => {
+            console.log('触发点击事件');
+        }, (e) => {
+            console.log('触发滑动事件', e.getDelta());
+        })
     }
 
     /**
